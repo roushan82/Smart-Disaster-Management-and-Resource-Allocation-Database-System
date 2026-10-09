@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Disaster Management System</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+
+        header {
+            background: #172554;
+            color: white;
+            padding: 30px 7%;
+        }
+
+        header h1 {
+            margin: 0 0 10px;
+        }
+
+        header p {
+            margin: 0;
+            color: #dbeafe;
+        }
+
+        nav {
+            background: white;
+            padding: 16px 7%;
+            box-shadow: 0 2px 6px #00000010;
+        }
+
+        nav a {
+            color: #1d4ed8;
+            text-decoration: none;
+            font-weight: bold;
+            margin-right: 22px;
+        }
+
+        main {
+            padding: 30px 7%;
+        }
+
+        .welcome {
+            margin-bottom: 25px;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px #0000000d;
+            border-top: 4px solid #2563eb;
+        }
+
+        .card h2 {
+            margin-top: 0;
+        }
+
+        .card p {
+            color: #64748b;
+            line-height: 1.5;
+        }
+
+        .card a {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 10px 16px;
+            background: #1d4ed8;
+            color: white;
+            border-radius: 6px;
+            text-decoration: none;
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #64748b;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Smart Disaster Management System</h1>
+        <p>Emergency response, resource allocation and rescue coordination</p>
+    </header>
+
+    <nav>
+        <a href="/">Home</a>
+        <a href="/disasters">Disasters</a>
+        <a href="/resources">Resources</a>
+        <a href="/requests">Emergency Requests</a>
+        <a href="/teams">Rescue Teams</a>
+        <a href="/personnel">Personnel</a>
+        <a href="/reports">Reports</a>
+    </nav>
+
+    <main>
+        <section class="welcome">
+            <h2>Welcome to the Control Dashboard</h2>
+            <p>Select a module below to manage disaster response activities.</p>
+        </section>
+
+        <section class="cards">
+            <div class="card">
+                <h2>Disasters</h2>
+                <p>Register new disasters and update their status.</p>
+                <a href="/disasters">Manage Disasters</a>
+            </div>
+
+            <div class="card">
+                <h2>Resources</h2>
+                <p>Track resource quantities, availability and replenishment.</p>
+                <a href="/resources">Manage Resources</a>
+            </div>
+
+            <div class="card">
+                <h2>Emergency Requests</h2>
+                <p>Create requests and allocate available emergency resources.</p>
+                <a href="/requests">Manage Requests</a>
+            </div>
+
+            <div class="card">
+                <h2>Rescue Teams</h2>
+                <p>Register rescue teams and manage their deployment status.</p>
+                <a href="/teams">Manage Teams</a>
+            </div>
+
+            <div class="card">
+                <h2>Personnel</h2>
+                <p>Manage team members, roles and availability.</p>
+                <a href="/personnel">Manage Personnel</a>
+            </div>
+
+            <div class="card">
+                <h2>Reports</h2>
+                <p>Review resource statistics and allocation history.</p>
+                <a href="/reports">View Reports</a>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        Smart Disaster Management and Resource Allocation Database System
+    </footer>
+</body>
+</html>
