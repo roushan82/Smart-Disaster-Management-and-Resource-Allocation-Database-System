@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Resource Management | Smart Disaster Management</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+
+        /* Common Navigation Bar */
+        nav {
+            background: #172554;
+            padding: 18px 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 28px;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 17px;
+        }
+
+        nav a:hover {
+            color: #93c5fd;
+        }
+
+        h1 {
+            font-size: 36px;
+            margin: 10px 0;
+        }
+
+        .subtitle {
+            color: #475569;
+            font-size: 18px;
+            margin-bottom: 25px;
+        }
+
+        /* Form and Table Cards */
+        .form-container,
+        .table-container {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            overflow-x: auto;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 22px;
+            font-size: 27px;
+        }
+
+        label {
+            display: inline-block;
+            margin: 10px 0 5px;
+            font-weight: bold;
+        }
+
+        input,
+        select {
+            padding: 11px;
+            margin: 5px 0 12px;
+            min-width: 200px;
+            max-width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 15px;
+            background: white;
+        }
+
+        input:focus,
+        select:focus {
+            outline: 2px solid #93c5fd;
+            border-color: #2563eb;
+        }
+
+        button {
+            padding: 11px 18px;
+            border: none;
+            border-radius: 6px;
+            background: #1d4ed8;
+            color: white;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1e40af;
+        }
+
+        .replenish-button {
+            background: #198754;
+        }
+
+        .replenish-button:hover {
+            background: #146c43;
+        }
+
+        /* Resources Table */
+        table {
+            width: 100%;
+            min-width: 800px;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 14px 12px;
+            text-align: center;
+        }
+
+        th {
+            background: #e9efff;
+            color: #172554;
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #f1f5f9;
+        }
+
+        .available {
+            color: #15803d;
+            font-weight: bold;
+        }
+
+        .unavailable {
+            color: #b42318;
+            font-weight: bold;
+        }
+
+        .replenish-form {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .replenish-form input {
+            min-width: 130px;
+            width: 130px;
+            margin: 0;
+        }
+
+        @media (max-width: 700px) {
+            body {
+                padding: 15px;
+            }
+
+            nav {
+                gap: 16px;
+                padding: 15px;
+            }
+
+            nav a {
+                font-size: 15px;
+            }
+
+            h1 {
+                font-size: 29px;
+            }
+
+            .form-container,
+            .table-container {
+                padding: 18px;
+            }
+        }
+        .error-message { color: #b91c1c; margin: 4px 0 10px; font-size: 14px; }
+    </style>
+</head>
+
+<body>
+
+    <h1>Resource Management</h1>
+    <p class="subtitle">
+        Manage disaster-response resources and monitor available quantities.
+    </p>
+
+    <!-- Common Navigation -->
+    {% include "shared/_nav.html" %}
+
+    <!-- Add New Resource -->
+    <div class="form-container">
+
+        <h2>Add New Resource</h2>
+
+        {% if errors.get('_form') %}<p role="alert" class="error-message">{{ errors.get('_form') }}</p>{% endif %}
+
+        <form method="POST" action="/resources/add">
+            {% include "shared/_csrf_field.html" %}
+
+            <label for="type_id">Resource Type:</label>
+            <br>
+
+            <select id="type_id" name="type_id" required>
+                <option value="">Select Resource Type</option>
+
+                {% for resource_type in resource_types %}
+                    <option value="{{ resource_type[0] }}" {% if form_data.get('type_id') == resource_type[0]|string %}selected{% endif %}>
+                        {{ resource_type[1] }} ({{ resource_type[2] }})
+                    </option>
+                {% endfor %}
+            </select>
+            {% if errors.get('type_id') %}<p role="alert" class="error-message">{{ errors.get('type_id') }}</p>{% endif %}
+
+            <br>
+
+            <label for="location_id">Location:</label>
+            <br>
+
+            <select id="location_id" name="location_id" required>
+                <option value="">Select Location</option>
+
+                {% for location in locations %}
+                    <option value="{{ location[0] }}" {% if form_data.get('location_id') == location[0]|string %}selected{% endif %}>
+                        {{ location[1] }}, {{ location[2] }}
+                    </option>
+                {% endfor %}
+            </select>
+            {% if errors.get('location_id') %}<p role="alert" class="error-message">{{ errors.get('location_id') }}</p>{% endif %}
+
+            <br>
+
+            <label for="total_quantity">Total Quantity:</label>
+            <br>
+
+            <input
+                type="number"
+                id="total_quantity"
+                name="total_quantity"
+                min="0"
+                value="{{ form_data.get('total_quantity', '') }}"
+                required
+            >
+            {% if errors.get('total_quantity') %}<p role="alert" class="error-message">{{ errors.get('total_quantity') }}</p>{% endif %}
+
+            <br>
+
+            <button type="submit">Add Resource</button>
+
+        </form>
+
+    </div>
+
+    <!-- Existing Resources -->
+    <div class="table-container">
+
+        <h2>Existing Resources</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Resource Type</th>
+                    <th>Location</th>
+                    <th>Total Quantity</th>
+                    <th>Available Quantity</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for resource in resources %}
+                    <tr>
+                        <td>{{ resource[0] }}</td>
+                        <td>{{ resource[1] }}</td>
+                        <td>{{ resource[2] }}</td>
+                        <td>{{ resource[3] }}</td>
+                        <td>{{ resource[4] }}</td>
+
+                        <td>
+                            {% if resource[5] == 'AVAILABLE' %}
+                                <span class="available">AVAILABLE</span>
+                            {% else %}
+                                <span class="unavailable">
+                                    UNAVAILABLE
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <form
+                                class="replenish-form"
+                                method="POST"
+                                action="/resources/replenish/{{ resource[0] }}"
+                            >
+                                {% include "shared/_csrf_field.html" %}
+                                <input
+                                    type="number"
+                                    name="quantity"
+                                    min="1"
+                                    value="{% if form_data.get('_resource_id') == resource[0]|string %}{{ form_data.get('quantity', '') }}{% endif %}"
+                                    placeholder="Add quantity"
+                                    aria-label="Quantity to replenish"
+                                    required
+                                >
+
+                                <button
+                                    type="submit"
+                                    class="replenish-button"
+                                >
+                                    Replenish
+                                </button>
+                            </form>
+                            {% if form_data.get('_resource_id') == resource[0]|string and errors.get('quantity') %}<p role="alert" class="error-message">{{ errors.get('quantity') }}</p>{% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="7">No resources found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    </div>
+
+</body>
+</html>
