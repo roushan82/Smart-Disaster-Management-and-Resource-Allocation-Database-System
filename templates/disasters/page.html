@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Disaster Management | Smart Disaster Management</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+
+        /* Common Navigation */
+        nav {
+            background: #172554;
+            padding: 18px 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 28px;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 17px;
+        }
+
+        nav a:hover {
+            color: #93c5fd;
+        }
+
+        h1 {
+            font-size: 36px;
+            margin: 10px 0;
+        }
+
+        .subtitle {
+            color: #475569;
+            font-size: 18px;
+            margin-bottom: 25px;
+        }
+
+        /* Form and Table Cards */
+        .form-container,
+        .table-container {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            overflow-x: auto;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 22px;
+            font-size: 27px;
+        }
+
+        label {
+            display: inline-block;
+            margin: 10px 0 5px;
+            font-weight: bold;
+        }
+
+        input,
+        select,
+        textarea {
+            padding: 11px;
+            margin: 5px 0 12px;
+            max-width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-family: Arial, sans-serif;
+            font-size: 15px;
+        }
+
+        input,
+        select {
+            min-width: 200px;
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 450px;
+            resize: vertical;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: 2px solid #93c5fd;
+            border-color: #2563eb;
+        }
+
+        button {
+            padding: 11px 18px;
+            border: none;
+            border-radius: 6px;
+            background: #1d4ed8;
+            color: white;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1e40af;
+        }
+
+        .resolve-button {
+            background: #198754;
+        }
+
+        .resolve-button:hover {
+            background: #146c43;
+        }
+
+        /* Disaster Table */
+        table {
+            width: 100%;
+            min-width: 750px;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 14px 12px;
+            text-align: center;
+        }
+
+        th {
+            background: #e9efff;
+            color: #172554;
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #f1f5f9;
+        }
+
+        .active {
+            color: #b42318;
+            font-weight: bold;
+        }
+
+        .resolved {
+            color: #15803d;
+            font-weight: bold;
+        }
+
+        @media (max-width: 700px) {
+            body {
+                padding: 15px;
+            }
+
+            nav {
+                gap: 16px;
+                padding: 15px;
+            }
+
+            nav a {
+                font-size: 15px;
+            }
+
+            h1 {
+                font-size: 29px;
+            }
+
+            .form-container,
+            .table-container {
+                padding: 18px;
+            }
+        }
+        .error-message { color: #b91c1c; margin: 4px 0 10px; font-size: 14px; }
+    </style>
+</head>
+
+<body>
+
+    <h1>Disaster Management</h1>
+
+    <p class="subtitle">
+        Register disasters and track their current status.
+    </p>
+
+    <!-- Common Navigation -->
+    {% include "shared/_nav.html" %}
+
+    <!-- Add New Disaster -->
+    <div class="form-container">
+
+        <h2>Add New Disaster</h2>
+
+        {% if errors.get('_form') %}
+            <p role="alert" class="error-message">{{ errors.get('_form') }}</p>
+        {% endif %}
+
+        <form method="POST" action="/disasters/add">
+            {% include "shared/_csrf_field.html" %}
+
+            <label for="name">Disaster Name:</label>
+            <br>
+
+            <input
+                type="text"
+                id="name"
+                name="name"
+                placeholder="e.g. Dehradun Flood"
+                maxlength="150"
+                value="{{ form_data.get('name', '') }}"
+                required
+            >
+            {% if errors.get('name') %}<p role="alert" class="error-message">{{ errors.get('name') }}</p>{% endif %}
+
+            <br>
+
+            <label for="type">Disaster Type:</label>
+            <br>
+
+            <select id="type" name="type" required>
+                <option value="">Select Disaster Type</option>
+                {% for disaster_type in disaster_types %}
+                    <option value="{{ disaster_type }}" {% if form_data.get('type') == disaster_type %}selected{% endif %}>{{ disaster_type }}</option>
+                {% endfor %}
+            </select>
+            {% if errors.get('type') %}<p role="alert" class="error-message">{{ errors.get('type') }}</p>{% endif %}
+
+            <br>
+
+            <label for="severity">Severity:</label>
+            <br>
+
+            <select id="severity" name="severity" required>
+                <option value="">Select Severity</option>
+                {% for severity in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] %}
+                    <option value="{{ severity }}" {% if form_data.get('severity') == severity %}selected{% endif %}>{{ severity }}</option>
+                {% endfor %}
+            </select>
+            {% if errors.get('severity') %}<p role="alert" class="error-message">{{ errors.get('severity') }}</p>{% endif %}
+
+            <br>
+
+            <label for="description">Description:</label>
+            <br>
+
+            <textarea
+                id="description"
+                name="description"
+                rows="4"
+                placeholder="Enter disaster details"
+            >{{ form_data.get('description', '') }}</textarea>
+            {% if errors.get('description') %}<p role="alert" class="error-message">{{ errors.get('description') }}</p>{% endif %}
+
+            <br>
+
+            <label for="location_id">Location:</label>
+            <br>
+
+            <select id="location_id" name="location_id" required>
+                <option value="">Select Location</option>
+
+                {% for location in locations %}
+                    <option value="{{ location[0] }}" {% if form_data.get('location_id') == location[0]|string %}selected{% endif %}>
+                        {{ location[1] }}, {{ location[2] }}
+                    </option>
+                {% endfor %}
+            </select>
+            {% if errors.get('location_id') %}<p role="alert" class="error-message">{{ errors.get('location_id') }}</p>{% endif %}
+
+            <br>
+
+            <button type="submit">Add Disaster</button>
+
+        </form>
+
+    </div>
+
+    <!-- Existing Disasters -->
+    <div class="table-container">
+
+        <h2>Existing Disasters</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Location</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for disaster in disasters %}
+                    <tr id="disaster-{{ disaster[0] }}">
+                        <td>{{ disaster[0] }}</td>
+                        <td>{{ disaster[1] }}</td>
+                        <td>{{ disaster[2] }}</td>
+                        <td>{{ disaster[3] }}</td>
+                        <td>{{ disaster[4] }}</td>
+
+                        <td>
+                            {% if disaster[5] == 'ACTIVE' %}
+                                <span class="active">ACTIVE</span>
+                            {% else %}
+                                <span class="resolved">RESOLVED</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {% if disaster[5] == 'ACTIVE' %}
+                                <form
+                                    method="POST"
+                                    action="/disasters/resolve/{{ disaster[0] }}"
+                                >
+                                    {% include "shared/_csrf_field.html" %}
+                                    <button
+                                        type="submit"
+                                        class="resolve-button"
+                                    >
+                                        Resolve
+                                    </button>
+                                </form>
+                            {% else %}
+                                Resolved
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="7">No disasters found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    </div>
+
+</body>
+</html>
