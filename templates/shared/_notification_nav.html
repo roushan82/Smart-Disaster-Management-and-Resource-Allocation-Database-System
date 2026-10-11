@@ -1,0 +1,5 @@
+<a href="{{ url_for('notifications.page') }}" class="notification-bell" title="Notifications" aria-label="Notifications: {{ unread_notification_count }} unread">
+    <span aria-hidden="true">&#128276;</span>
+    <span>Notifications</span>
+    <span class="notification-count">{{ unread_notification_count }}</span>
+</a>
