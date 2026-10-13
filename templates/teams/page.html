@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rescue Teams | Disaster Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f3f6fa;
+            margin: 0;
+            padding: 25px;
+            color: #1f2937;
+        }
+        nav {
+            background: #172554;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        nav a {
+            color: white;
+            margin-right: 20px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .card {
+            background: white;
+            padding: 22px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 8px #00000010;
+        }
+        input, select, button {
+            padding: 10px;
+            margin: 6px 4px 6px 0;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+        }
+        button {
+            background: #1d4ed8;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+        }
+        th {
+            background: #eaf0ff;
+        }
+        .error-message { color: #b91c1c; margin: 4px 0 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    {% include "shared/_nav.html" %}
+
+<h1>Rescue Teams Management</h1>
+
+<div class="card">
+    <h2>Add Rescue Team</h2>
+
+    {% if errors.get('_form') %}
+    <p role="alert" class="error-message">{{ errors.get('_form') }}</p>
+    {% endif %}
+
+    <form action="/teams/add" method="POST">
+        {% include "shared/_csrf_field.html" %}
+        <input type="text" name="team_name"
+               placeholder="Team Name" maxlength="100"
+               value="{{ form_data.get('team_name', '') }}" required>
+        {% if errors.get('team_name') %}<p role="alert" class="error-message">{{ errors.get('team_name') }}</p>{% endif %}
+
+        <select name="team_type" required>
+            <option value="">Select Team Type</option>
+            {% for team_type in team_types %}
+            <option value="{{ team_type }}" {% if form_data.get('team_type') == team_type %}selected{% endif %}>{{ team_type }}</option>
+            {% endfor %}
+        </select>
+        {% if errors.get('team_type') %}<p role="alert" class="error-message">{{ errors.get('team_type') }}</p>{% endif %}
+
+        <select name="location_id" required>
+            <option value="">Select Location</option>
+            {% for location in locations %}
+            <option value="{{ location.location_id }}" {% if form_data.get('location_id') == location.location_id|string %}selected{% endif %}>
+                {{ location.city }}, {{ location.state }}
+            </option>
+            {% endfor %}
+        </select>
+        {% if errors.get('location_id') %}<p role="alert" class="error-message">{{ errors.get('location_id') }}</p>{% endif %}
+
+        <button type="submit">Add Team</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Rescue Teams List</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Team Name</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Update Status</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for team in teams %}
+            <tr id="team-{{ team.team_id }}">
+                <td>{{ team.team_id }}</td>
+                <td>{{ team.team_name }}</td>
+                <td>{{ team.team_type or '-' }}</td>
+                <td>{{ team.city or 'Not assigned' }}</td>
+                <td>{{ team.status }}</td>
+                <td>
+                    <form action="/teams/status/{{ team.team_id }}"
+                          method="POST">
+                        {% include "shared/_csrf_field.html" %}
+                                                <input type="hidden" name="team_id" value="{{ team.team_id }}">
+                        <select name="status">
+                            {% for team_status in team_statuses %}
+                            <option value="{{ team_status }}"
+                                {% if form_data.get('status') == team_status and form_data.get('team_id') == team.team_id|string or not form_data.get('status') and team.status == team_status %}selected{% endif %}>
+                                {{ team_status }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if errors.get('status') %}<p role="alert" class="error-message">{{ errors.get('status') }}</p>{% endif %}
+                        <button type="submit">Update</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6">No rescue teams added yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+</body>
+</html>
