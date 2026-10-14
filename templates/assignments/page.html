@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Assignments | Smart Disaster Management</title>
+    <style>
+        body { margin: 0; padding: 22px; background: #f1f5f9; color: #1e293b; font-family: Arial, sans-serif; }
+        nav { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 15px; background: #172554; border-radius: 7px; }
+        nav a { color: white; text-decoration: none; }
+        main { max-width: 1100px; margin: 22px auto; }
+        section { margin: 18px 0; padding: 18px; border-radius: 6px; background: white; }
+        input, select, textarea { padding: 8px; margin: 4px; border: 1px solid #b9c4d0; border-radius: 4px; }
+        textarea { display: block; width: min(600px, 95%); min-height: 70px; }
+        button { padding: 8px 12px; border: 0; border-radius: 4px; background: #124b68; color: white; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; border-bottom: 1px solid #dbe2ea; text-align: left; }
+        th { background: #e9efff; }
+    </style>
+</head>
+<body>
+    {% include "shared/_nav.html" %}
+    <main>
+        <h1>Assign Emergency Requests to Teams</h1>
+        {% if message %}<p role="status">{{ message }}</p>{% endif %}
+        {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+        <section>
+            <h2>New assignment</h2>
+            {% if not assignments_available %}<p role="status">The assignment feature needs the <code>team_request_assignments</code> table. Its records and schema were not changed.</p>{% else %}<p role="status">Creating assignments requires a real creator ID in <code>assigned_by_user_id</code>. The application has no authenticated creator identity, so no ID is fabricated.</p>{% endif %}
+            <form action="{{ url_for('assignments.create') }}" method="POST">
+                {% include "shared/_csrf_field.html" %}
+                <select name="request_id" required disabled>
+                    <option value="">Select pending request</option>
+                    {% for item in eligible_requests %}<option value="{{ item.request_id }}">#{{ item.request_id }} · {{ item.disaster_name }} · {{ item.priority }}</option>{% endfor %}
+                </select>
+                <select name="team_id" required disabled>
+                    <option value="">Select team</option>
+                    {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }} · {{ team.status }}</option>{% endfor %}
+                </select>
+                <textarea name="instructions" maxlength="4000" placeholder="Operational instructions (optional)" disabled></textarea>
+                <button type="submit" disabled>Assign request</button>
+            </form>
+        </section>
+        <section>
+            <h2>Current assignments</h2>
+            <table><thead><tr><th>Request</th><th>Disaster</th><th>Team</th><th>Status</th><th>Instructions</th><th>Assigned</th><th>Update status</th></tr></thead>
+                <tbody>{% for item in assignments %}<tr><td><a href="/requests#request-{{ item.request_id }}">#{{ item.request_id }}</a></td><td>{{ item.disaster_name }}</td><td><a href="/teams">{{ item.team_name }}</a></td><td>{{ item.status }}</td><td>{{ item.instructions or '-' }}</td><td>{{ item.assigned_at }}</td><td>{% if item.status not in ['COMPLETED', 'CANCELLED'] %}<form action="{{ url_for('assignments.update_status', assignment_id=item.assignment_id) }}" method="POST">{% include "shared/_csrf_field.html" %}<select name="status">{% for status in ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'] %}<option value="{{ status }}" {% if item.status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select><button type="submit">Save</button></form>{% else %}-{% endif %}</td></tr>{% else %}<tr><td colspan="7">No team assignments yet.</td></tr>{% endfor %}</tbody>
+            </table>
+        </section>
+    </main>
+</body>
+</html>
