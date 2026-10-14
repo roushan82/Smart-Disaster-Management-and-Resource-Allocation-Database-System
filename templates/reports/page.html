@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Reports Dashboard | Smart Disaster Management</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+
+        /* Common Navigation */
+        nav {
+            background: #172554;
+            padding: 18px 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 28px;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 17px;
+        }
+
+        nav a:hover {
+            color: #93c5fd;
+        }
+
+        h1 {
+            font-size: 36px;
+            margin: 10px 0;
+        }
+
+        .subtitle {
+            color: #475569;
+            font-size: 18px;
+            margin-bottom: 25px;
+        }
+
+        /* Statistics Cards */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            border-top: 4px solid #2563eb;
+        }
+
+        .card h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #475569;
+            font-size: 17px;
+        }
+
+        .number {
+            font-size: 34px;
+            font-weight: bold;
+            color: #172554;
+            margin-bottom: 10px;
+        }
+
+        .card p {
+            color: #475569;
+            margin: 8px 0;
+            line-height: 1.5;
+        }
+
+        /* Allocation History */
+        .section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-top: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            overflow-x: auto;
+        }
+
+        .section h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 27px;
+        }
+
+        table {
+            width: 100%;
+            min-width: 750px;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th,
+        td {
+            padding: 14px 12px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: center;
+        }
+
+        th {
+            background: #e9efff;
+            color: #172554;
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #f1f5f9;
+        }
+
+        @media (max-width: 700px) {
+            body {
+                padding: 15px;
+            }
+
+            nav {
+                gap: 16px;
+                padding: 15px;
+            }
+
+            nav a {
+                font-size: 15px;
+            }
+
+            h1 {
+                font-size: 29px;
+            }
+
+            .card,
+            .section {
+                padding: 18px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Disaster Management Dashboard</h1>
+
+    <p class="subtitle">
+        Overview of disasters, resources, requests and allocations.
+    </p>
+
+    <!-- Common Navigation -->
+    {% include "shared/_nav.html" %}
+
+    <!-- Statistics Cards -->
+    <div class="cards">
+
+        <div class="card">
+            <h3>Total Disasters</h3>
+
+            <div class="number">
+                {{ disaster_stats[0] or 0 }}
+            </div>
+
+            <p>
+                Active Disasters:
+                <strong>{{ disaster_stats[1] or 0 }}</strong>
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>Resource Records</h3>
+
+            <div class="number">
+                {{ resource_stats[0] or 0 }}
+            </div>
+
+            <p>
+                Total Quantity:
+                <strong>{{ resource_stats[1] or 0 }}</strong>
+            </p>
+
+            <p>
+                Available Quantity:
+                <strong>{{ resource_stats[2] or 0 }}</strong>
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>Total Requests</h3>
+
+            <div class="number">
+                {{ request_stats[0] or 0 }}
+            </div>
+
+            <p>
+                Pending:
+                <strong>{{ request_stats[1] or 0 }}</strong>
+            </p>
+
+            <p>
+                Allocated:
+                <strong>{{ request_stats[2] or 0 }}</strong>
+            </p>
+
+            <p>
+                Partially Allocated:
+                <strong>{{ request_stats[3] or 0 }}</strong>
+            </p>
+        </div>
+
+    </div>
+
+    <!-- Allocation History -->
+    <div class="section">
+
+        <h2>Allocation History</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Allocation ID</th>
+                    <th>Request ID</th>
+                    <th>Resource</th>
+                    <th>Quantity Allocated</th>
+                    <th>Allocation Time</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for allocation in allocation_history %}
+                    <tr>
+                        <td>{{ allocation[0] }}</td>
+                        <td>{{ allocation[1] }}</td>
+                        <td>{{ allocation[2] }}</td>
+                        <td>{{ allocation[3] }}</td>
+                        <td>{{ allocation[4] }}</td>
+                        <td>{{ allocation[5] }}</td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="6">
+                            No allocation records found.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    </div>
+
+    <!-- Scheduling Metrics -->
+    <div class="section">
+
+        <h2>Scheduling Metrics</h2>
+
+        <p class="subtitle">
+            Waiting time is how long a request waited from creation until it was allocated.
+            MANUAL means it was allocated with the manual Allocate button, not by a scheduler run.
+            Turnaround time is not shown separately because an allocation completes instantly,
+            so it would equal the waiting time.
+        </p>
+
+        <h3>By scheduling algorithm</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Algorithm</th>
+                    <th>Requests Allocated</th>
+                    <th>Average Wait</th>
+                    <th>Shortest Wait</th>
+                    <th>Longest Wait</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in metrics.by_algorithm %}
+                    <tr>
+                        <td>{{ row.algorithm }}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{{ row.average }}</td>
+                        <td>{{ row.shortest }}</td>
+                        <td>{{ row.longest }}</td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="5">No allocations yet.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h3>By request priority</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Priority</th>
+                    <th>Requests Allocated</th>
+                    <th>Average Wait</th>
+                    <th>Longest Wait</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in metrics.by_priority %}
+                    <tr>
+                        <td>{{ row.priority }}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{{ row.average }}</td>
+                        <td>{{ row.longest }}</td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="4">No allocations yet.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h3>Requests still waiting</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Pending Requests</th>
+                    <th>Average Wait So Far</th>
+                    <th>Longest Wait So Far</th>
+                    <th>Aged (over {{ metrics.aging_threshold_minutes }} min)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ metrics.pending.count }}</td>
+                    <td>{{ metrics.pending.average }}</td>
+                    <td>{{ metrics.pending.longest }}</td>
+                    <td>{{ metrics.pending.aged }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+
+</body>
+</html>
