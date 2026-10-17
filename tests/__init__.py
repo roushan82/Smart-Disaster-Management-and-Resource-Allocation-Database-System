@@ -1,0 +1,1 @@
+"""Automated application tests."""
