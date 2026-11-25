@@ -2,6 +2,7 @@ import mysql.connector
 from flask import Blueprint, abort, redirect, render_template, request
 
 from core import db
+from core.reviewer_auth import operational_officer_required
 from core.validation import FormValidationError, validate_status
 from modules.teams.validation import TEAM_STATUSES, TEAM_TYPES, validate_team
 
@@ -42,6 +43,7 @@ def teams():
 
 
 @bp.route("/teams/add", methods=["POST"])
+@operational_officer_required
 def add_team():
     try:
         values = validate_team(request.form)
@@ -72,6 +74,7 @@ def add_team():
 
 
 @bp.route("/teams/status/<int:team_id>", methods=["POST"])
+@operational_officer_required
 def update_team_status(team_id):
     try:
         team_status = validate_status(request.form, "status", "Team status", TEAM_STATUSES)

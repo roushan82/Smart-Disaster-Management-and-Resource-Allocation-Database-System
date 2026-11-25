@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import patch
 
@@ -65,12 +66,31 @@ class RouteValidationTests(unittest.TestCase):
         app.secret_key = "unit-test-only-session-secret-value-0001"
         self.count_patcher = patch("modules.notifications.service.get_unread_notification_count", return_value=0)
         self.count_patcher.start()
+        self.officer_username = "test_officer"
+        self.env_patcher = patch.dict(os.environ, {
+            "DISASTER_OFFICER_USERNAME": self.officer_username,
+            "DISASTER_OFFICER_PASSWORD_HASH": "scrypt:32768:8:1$test$fakeofficerpasswordhash",
+        }, clear=False)
+        self.env_patcher.start()
         self.client = app.test_client()
         with self.client.session_transaction() as session_data:
             session_data["_csrf_token"] = "unit-test-csrf-token"
 
     def tearDown(self):
         self.count_patcher.stop()
+        self.env_patcher.stop()
+
+    def authenticate_officer(self, username=None):
+        """Establish an authenticated operational disaster officer session."""
+        user = username or self.officer_username
+        with self.client.session_transaction() as session_data:
+            session_data["disaster_officer"] = user
+            session_data["_csrf_token"] = "unit-test-csrf-token"
+
+    def clear_officer_session(self):
+        """Remove operational disaster officer credentials from session."""
+        with self.client.session_transaction() as session_data:
+            session_data.pop("disaster_officer", None)
 
     def post(self, path, data=None, **kwargs):
         form = dict(data or {})
@@ -84,6 +104,7 @@ class RouteValidationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_direct_posts_reject_invalid_categories_and_typed_values(self):
+        self.authenticate_officer()
         self.assert_rejected_without_database(
             "/disasters/add",
             {"name": "Storm", "type": "Arbitrary", "severity": "HIGH", "location_id": "1"},
@@ -106,6 +127,7 @@ class RouteValidationTests(unittest.TestCase):
         )
 
     def test_direct_posts_reject_missing_ids_and_negative_quantities(self):
+        self.authenticate_officer()
         self.assert_rejected_without_database(
             "/disasters/add",
             {"name": "", "type": "Flood", "severity": "HIGH", "location_id": "1"},
@@ -133,6 +155,7 @@ class RouteValidationTests(unittest.TestCase):
         )
 
     def test_existing_fk_is_checked_before_insert(self):
+        self.authenticate_officer()
         connection = FakeConnection(fetched=None)
         with patch("core.db.get_db_connection", return_value=connection):
             with patch("modules.personnel.routes._render_personnel", return_value=("Rejected", 400)):
@@ -147,6 +170,7 @@ class RouteValidationTests(unittest.TestCase):
         self.assertFalse(connection.committed)
 
     def test_valid_direct_create_requests_reach_parameterized_inserts(self):
+        self.authenticate_officer()
         cases = (
             (
                 "/disasters/add",
@@ -180,6 +204,7 @@ class RouteValidationTests(unittest.TestCase):
                 self.assertIn("%s", inserts[0][0])
 
     def test_valid_status_update_commits(self):
+        self.authenticate_officer()
         connection = FakeConnection()
         with patch("core.db.get_db_connection", return_value=connection):
             response = self.post(
@@ -193,6 +218,7 @@ class RouteValidationTests(unittest.TestCase):
         )
 
     def test_active_disasters_render_as_selectable_options_with_database_ids(self):
+        self.authenticate_officer()
         connection = RequestPageConnection([
             [],
             [(42, "Current flood", "ACTIVE"), (41, "Resolved quake", "RESOLVED")],
@@ -248,6 +274,7 @@ class RouteValidationTests(unittest.TestCase):
         notify_scheduler.assert_called_once_with()
 
     def test_scheduler_route_uses_selected_algorithm_and_rejects_unknown_choice(self):
+        self.authenticate_officer()
         scheduler_result = {"message": "PRIORITY run completed."}
         with patch("modules.emergency_requests.routes.schedule_pending_requests", return_value=scheduler_result) as scheduler:
             with patch("modules.emergency_requests.routes._render_requests", return_value=("Scheduled", 200)):
@@ -257,6 +284,21 @@ class RouteValidationTests(unittest.TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         scheduler.assert_called_once_with("PRIORITY")
+
+        with patch(
+            "modules.emergency_requests.routes.schedule_pending_requests",
+            return_value={"message": "RR run completed."},
+        ) as scheduler:
+            with patch(
+                "modules.emergency_requests.routes._render_requests",
+                return_value=("Scheduled", 200),
+            ):
+                response = self.post(
+                    "/requests/schedule",
+                    data={"algorithm": "RR"},
+                )
+        self.assertEqual(response.status_code, 200)
+        scheduler.assert_called_once_with("RR")
 
         with patch("modules.emergency_requests.routes.schedule_pending_requests") as scheduler:
             with patch("modules.emergency_requests.routes._render_requests", return_value=("Rejected", 400)):
@@ -268,6 +310,7 @@ class RouteValidationTests(unittest.TestCase):
         scheduler.assert_not_called()
 
     def test_manual_allocation_route_remains_connected(self):
+        self.authenticate_officer()
         with patch("modules.emergency_requests.routes.allocate_request", return_value=(True, "Allocated.")) as allocate:
             with patch("modules.emergency_requests.routes._render_requests", return_value=("Allocated", 200)):
                 response = self.post("/requests/allocate/21")
@@ -305,9 +348,88 @@ class RouteValidationTests(unittest.TestCase):
         self.assertNotIn(b"Sign in", dashboard.data)
         self.assertEqual(legacy_dashboard.status_code, 301)
 
-    def test_login_route_is_absent_and_public_pages_do_not_redirect(self):
+    def test_reviewer_login_route_is_available_without_review_session(self):
         response = self.client.get("/login")
         self.assertEqual(response.status_code, 404)
+        with patch.dict(
+            "os.environ",
+            {
+                "REVIEWER_USERNAME": "reviewer@example.test",
+                "REVIEWER_PASSWORD_HASH": "scrypt:32768:8:1$test$invalid",
+            },
+        ):
+            response = self.client.get("/review/login")
+        self.assertEqual(response.status_code, 200)
+
+    def test_administrative_post_routes_reject_unauthenticated_requests(self):
+        protected_endpoints = [
+            ("/disasters/add", {"name": "River Flood", "type": "Flood", "severity": "HIGH", "location_id": "1"}),
+            ("/disasters/resolve/1", {}),
+            ("/resources/add", {"type_id": "1", "location_id": "1", "total_quantity": "50"}),
+            ("/resources/replenish/1", {"quantity": "10"}),
+            ("/teams/add", {"team_name": "Alpha Squad", "team_type": "Flood Rescue", "location_id": "1"}),
+            ("/teams/status/1", {"status": "AVAILABLE"}),
+            ("/personnel/add", {"name": "Officer Patel", "role": "Doctor", "contact": "9876543210", "team_id": "1"}),
+            ("/personnel/status/1", {"status": "AVAILABLE"}),
+            ("/requests/allocate/1", {}),
+            ("/requests/schedule", {"algorithm": "FCFS"}),
+        ]
+        self.clear_officer_session()
+        for endpoint, payload in protected_endpoints:
+            with self.subTest(endpoint=endpoint):
+                response = self.post(endpoint, data=payload)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn("/officer/login", response.headers.get("Location", ""))
+
+    def test_authenticated_officer_can_resolve_disaster(self):
+        self.authenticate_officer()
+        connection = FakeConnection()
+        with patch("core.db.get_db_connection", return_value=connection):
+            with patch("modules.disasters.routes.create_notification") as notify:
+                response = self.post("/disasters/resolve/7")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers.get("Location"), "/disasters")
+        self.assertTrue(connection.committed)
+        self.assertIn(
+            ("UPDATE disasters SET status = 'RESOLVED' WHERE disaster_id = %s", (7,)),
+            connection.fake_cursor.statements,
+        )
+        notify.assert_called_once()
+
+    def test_authenticated_officer_can_replenish_resource(self):
+        self.authenticate_officer()
+        connection = FakeConnection(fetched=(100, 20))
+        connection.start_transaction = lambda: None
+        with patch("core.db.get_db_connection", return_value=connection):
+            response = self.post("/resources/replenish/9", data={"quantity": "5"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers.get("Location"), "/resources")
+        self.assertTrue(connection.committed)
+        self.assertTrue(any(
+            "UPDATE resources" in statement and parameters == (5, 5, 9)
+            for statement, parameters in connection.fake_cursor.statements
+        ))
+
+    def test_public_request_add_works_without_officer_authentication(self):
+        self.clear_officer_session()
+        connection = FakeConnection()
+        with patch("core.db.get_db_connection", return_value=connection):
+            with patch("modules.emergency_requests.routes.signal_automatic_scheduler") as notify_scheduler:
+                response = self.post(
+                    "/requests/add",
+                    data={
+                        "disaster_id": "1",
+                        "resource_type_id": "1",
+                        "requested_quantity": "5",
+                        "priority": "HIGH",
+                    },
+                )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers.get("Location"), "/requests")
+        self.assertTrue(connection.committed)
+        notify_scheduler.assert_called_once_with()
 
     def test_post_requires_a_valid_csrf_token(self):
         self.client.delete_cookie("session")

@@ -2,6 +2,7 @@ import mysql.connector
 from flask import Blueprint, abort, redirect, render_template, request
 
 from core import db
+from core.reviewer_auth import operational_officer_required
 from core.validation import MAX_MYSQL_INT, FormValidationError
 from modules.resources.validation import validate_replenishment, validate_resource
 
@@ -43,6 +44,7 @@ def resources():
 
 
 @bp.route("/resources/add", methods=["POST"])
+@operational_officer_required
 def add_resource():
     try:
         values = validate_resource(request.form)
@@ -84,6 +86,7 @@ def add_resource():
 
 
 @bp.route("/resources/replenish/<int:resource_id>", methods=["POST"])
+@operational_officer_required
 def replenish_resource(resource_id):
     if resource_id < 1:
         abort(404)

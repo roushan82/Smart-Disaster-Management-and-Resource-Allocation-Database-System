@@ -349,6 +349,7 @@
 
         <h2>Existing Emergency Requests</h2>
 
+        {% if session.get('disaster_officer') %}
         <details>
             <summary>Manual admin fallback</summary>
             <form action="/requests/schedule" method="POST">
@@ -359,8 +360,16 @@
                 <button type="submit" name="algorithm" value="PRIORITY" class="process-button">
                     Run Priority manually
                 </button>
+                <button type="submit" name="algorithm" value="RR" class="process-button">
+                    Run Round Robin manually
+                </button>
             </form>
         </details>
+        {% else %}
+        <p style="color: #64748b; font-size: 14px; margin-bottom: 16px;">
+            Officer login is required to run manual scheduling or allocate requests. <a href="{{ url_for('emergency_requests.officer_login') }}" style="color: #2563eb; font-weight: bold;">Sign in as Officer</a>.
+        </p>
+        {% endif %}
 
         <table>
             <thead>
@@ -406,6 +415,7 @@
 
                         <td>
                             {% if request[5] == 'PENDING' %}
+                                {% if session.get('disaster_officer') %}
                                 <form
                                     class="allocate-form"
                                     action="/requests/allocate/{{ request[0] }}"
@@ -416,6 +426,9 @@
                                         Allocate
                                     </button>
                                 </form>
+                                {% else %}
+                                    <span style="color: #64748b; font-size: 13px;">Login required</span>
+                                {% endif %}
                             {% else %}
                                 -
                             {% endif %}

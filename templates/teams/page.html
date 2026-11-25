@@ -65,6 +65,7 @@
 
 <h1>Rescue Teams Management</h1>
 
+{% if session.get('disaster_officer') %}
 <div class="card">
     <h2>Add Rescue Team</h2>
 
@@ -100,6 +101,12 @@
         <button type="submit">Add Team</button>
     </form>
 </div>
+{% else %}
+<div class="card" style="background: #f8fafc; border: 1px solid #cbd5e1;">
+    <h2>Add Rescue Team</h2>
+    <p style="color: #475569; margin: 0;">Officer login is required to register rescue teams or update team deployment status. <a href="{{ url_for('emergency_requests.officer_login') }}" style="color: #2563eb; font-weight: bold;">Sign in as Officer</a>.</p>
+</div>
+{% endif %}
 
 <div class="card">
     <h2>Rescue Teams List</h2>
@@ -125,6 +132,7 @@
                 <td>{{ team.city or 'Not assigned' }}</td>
                 <td>{{ team.status }}</td>
                 <td>
+                    {% if session.get('disaster_officer') %}
                     <form action="/teams/status/{{ team.team_id }}"
                           method="POST">
                         {% include "shared/_csrf_field.html" %}
@@ -140,6 +148,9 @@
                         {% if errors.get('status') %}<p role="alert" class="error-message">{{ errors.get('status') }}</p>{% endif %}
                         <button type="submit">Update</button>
                     </form>
+                    {% else %}
+                        <span style="color: #64748b; font-size: 13px;">Login required</span>
+                    {% endif %}
                 </td>
             </tr>
             {% else %}

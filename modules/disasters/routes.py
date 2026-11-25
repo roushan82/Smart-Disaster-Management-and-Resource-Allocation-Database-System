@@ -2,6 +2,7 @@ import mysql.connector
 from flask import Blueprint, abort, redirect, render_template, request
 
 from core import db
+from core.reviewer_auth import operational_officer_required
 from core.validation import FormValidationError
 from modules.disasters.validation import DISASTER_TYPES, validate_disaster
 from modules.notifications.service import create_notification
@@ -41,6 +42,7 @@ def disasters():
 
 
 @bp.route("/disasters/add", methods=["POST"])
+@operational_officer_required
 def add_disaster():
     try:
         values = validate_disaster(request.form)
@@ -83,6 +85,7 @@ def add_disaster():
 
 
 @bp.route("/disasters/resolve/<int:disaster_id>", methods=["POST"])
+@operational_officer_required
 def resolve_disaster(disaster_id):
     connection = db.get_db_connection()
     cursor = connection.cursor()

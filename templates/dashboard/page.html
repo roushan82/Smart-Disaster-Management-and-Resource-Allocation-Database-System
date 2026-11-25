@@ -111,9 +111,14 @@
         <section class="cards" aria-label="Operational summary">
             <div class="card"><h2>{{ active_disasters }}</h2><p>Active disasters</p></div>
             <div class="card"><h2>{{ pending_requests }}</h2><p>Pending requests</p></div>
+            <div class="card"><h2>{{ pending_critical_requests }}</h2><p>Pending CRITICAL requests</p></div>
+            <div class="card"><h2>{{ pending_high_requests }}</h2><p>Pending HIGH requests</p></div>
             <div class="card"><h2>{{ allocated_requests }}</h2><p>Allocated requests</p></div>
             <div class="card"><h2>{{ available_teams }}</h2><p>Available rescue teams</p></div>
+            <div class="card"><h2>{{ deployed_teams }}</h2><p>Deployed rescue teams</p></div>
             <div class="card"><h2>{{ available_resources }}</h2><p>Available resource units</p></div>
+            <div class="card"><h2>{{ depleted_resource_categories }}</h2><p>Depleted resource categories</p></div>
+            <div class="card"><h2>{{ pending_historical_reviews }}</h2><p>Pending historical reviews</p></div>
             <div class="card"><h2>{% if worker_running %}RUNNING{% else %}STOPPED{% endif %}</h2><p>Automatic scheduler worker</p></div>
         </section>
 

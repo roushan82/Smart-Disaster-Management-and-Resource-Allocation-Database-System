@@ -208,6 +208,7 @@
     {% include "shared/_nav.html" %}
 
     <!-- Add New Resource -->
+    {% if session.get('disaster_officer') %}
     <div class="form-container">
 
         <h2>Add New Resource</h2>
@@ -269,6 +270,12 @@
         </form>
 
     </div>
+    {% else %}
+    <div class="form-container" style="background: #f8fafc; border: 1px solid #cbd5e1;">
+        <h2>Add New Resource</h2>
+        <p style="color: #475569; margin: 0;">Officer login is required to add resources or replenish stock. <a href="{{ url_for('emergency_requests.officer_login') }}" style="color: #2563eb; font-weight: bold;">Sign in as Officer</a>.</p>
+    </div>
+    {% endif %}
 
     <!-- Existing Resources -->
     <div class="table-container">
@@ -308,6 +315,7 @@
                         </td>
 
                         <td>
+                            {% if session.get('disaster_officer') %}
                             <form
                                 class="replenish-form"
                                 method="POST"
@@ -332,6 +340,9 @@
                                 </button>
                             </form>
                             {% if form_data.get('_resource_id') == resource[0]|string and errors.get('quantity') %}<p role="alert" class="error-message">{{ errors.get('quantity') }}</p>{% endif %}
+                            {% else %}
+                                <span style="color: #64748b; font-size: 13px;">Login required</span>
+                            {% endif %}
                         </td>
                     </tr>
                 {% else %}

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historical Detection Review</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 30px; background: #f1f5f9; color: #1e293b; }
+        nav { background: #172554; padding: 18px 20px; border-radius: 10px; margin-bottom: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+        nav a, nav button { color: white; font-weight: bold; text-decoration: none; background: none; border: 0; font-size: 15px; cursor: pointer; }
+        .section { background: white; padding: 24px; border-radius: 12px; margin: 20px 0; box-shadow: 0 4px 12px #0001; overflow-x: auto; }
+        .meta { color: #475569; }
+        pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; }
+        label { display: block; margin: 12px 0 6px; font-weight: bold; }
+        select, textarea { width: 100%; max-width: 700px; padding: 10px; border: 1px solid #94a3b8; border-radius: 6px; font: inherit; }
+        textarea { min-height: 90px; }
+        .decision { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+        button { padding: 10px 16px; border: 0; border-radius: 6px; background: #172554; color: white; font-weight: bold; cursor: pointer; }
+        .notice { padding: 12px; background: #dcfce7; color: #166534; border-radius: 6px; }
+        .empty { color: #475569; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 13px; font-weight: bold; }
+        .badge-confirmed { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+        .badge-potential { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+        .badge-insufficient_data { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        .badge-rejected { background: #e2e8f0; color: #475569; border: 1px solid #cbd5e1; }
+        .evidence-list { list-style-type: square; padding-left: 20px; color: #334155; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 20px 0; }
+        .summary-card { background: white; padding: 18px 20px; border-radius: 10px; box-shadow: 0 4px 12px #0001; display: flex; flex-direction: column; gap: 8px; }
+        .summary-label { font-size: 13px; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .summary-value { font-size: 24px; font-weight: bold; color: #0f172a; }
+        .filter-section { margin: 20px 0; }
+        .filter-form { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+        .filter-group { display: flex; flex-direction: column; min-width: 220px; flex: 1; }
+        .filter-actions { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
+        .btn-filter { padding: 10px 16px; border: 0; border-radius: 6px; background: #172554; color: white; font-weight: bold; cursor: pointer; }
+        .btn-reset { color: #475569; text-decoration: none; font-weight: bold; padding: 9px 16px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; font-size: 14px; }
+        .btn-reset:hover { background: #e2e8f0; }
+        @media (max-width: 700px) { body { padding: 15px; } .section { padding: 18px; } }
+    </style>
+</head>
+<body>
+    <h1>Historical Detection Review</h1>
+    <p class="meta">Signed in as <strong>{{ reviewer }}</strong>. These are retrospective observations, not live emergencies.</p>
+    {% include "shared/_nav.html" %}
+    <nav>
+        <form method="post" action="{{ url_for('reports.historical_review_logout') }}">
+            {% include "shared/_csrf_field.html" %}
+            <button type="submit">Sign out reviewer</button>
+        </form>
+    </nav>
+    {% for item in get_flashed_messages() %}
+        <p class="notice">{{ item }}</p>
+    {% endfor %}
+    {% if message %}<p class="notice">{{ message }}</p>{% endif %}
+
+    <!-- Outcome Summary Counts (Detection Records Grouped by Outcome) -->
+    <div class="summary-cards">
+        <div class="summary-card">
+            <span class="summary-label">Total Detections</span>
+            <span class="summary-value" id="summary-total">{{ outcome_summary.TOTAL if outcome_summary else 0 }}</span>
+        </div>
+        <div class="summary-card">
+            <span class="summary-label">Confirmed</span>
+            <span class="summary-value"><span class="badge badge-confirmed" id="summary-confirmed">{{ outcome_summary.CONFIRMED if outcome_summary else 0 }}</span></span>
+        </div>
+        <div class="summary-card">
+            <span class="summary-label">Potential</span>
+            <span class="summary-value"><span class="badge badge-potential" id="summary-potential">{{ outcome_summary.POTENTIAL if outcome_summary else 0 }}</span></span>
+        </div>
+        <div class="summary-card">
+            <span class="summary-label">Insufficient Data</span>
+            <span class="summary-value"><span class="badge badge-insufficient_data" id="summary-insufficient-data">{{ outcome_summary.INSUFFICIENT_DATA if outcome_summary else 0 }}</span></span>
+        </div>
+        <div class="summary-card">
+            <span class="summary-label">Rejected</span>
+            <span class="summary-value"><span class="badge badge-rejected" id="summary-rejected">{{ outcome_summary.REJECTED if outcome_summary else 0 }}</span></span>
+        </div>
+    </div>
+
+    <!-- Independent Filters (Outcome & Review Status) -->
+    <section class="section filter-section">
+        <h2 style="margin-top: 0;">Filter Detections</h2>
+        <form method="get" action="{{ url_for('reports.historical_detections') }}" class="filter-form">
+            <div class="filter-group">
+                <label for="filter-outcome">Detection Outcome</label>
+                <select id="filter-outcome" name="outcome">
+                    <option value="">All Outcomes</option>
+                    {% for outcome in valid_outcomes %}
+                        <option value="{{ outcome }}" {% if selected_outcome == outcome %}selected{% endif %}>{{ outcome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="filter-review-status">Review Status</label>
+                <select id="filter-review-status" name="review_status">
+                    <option value="">All Review Statuses</option>
+                    {% for status in valid_review_statuses %}
+                        <option value="{{ status }}" {% if selected_review_status == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-actions">
+                <button type="submit" class="btn-filter">Apply Filters</button>
+                <a href="{{ url_for('reports.historical_detections') }}" class="btn-reset">Reset Filters</a>
+            </div>
+        </form>
+    </section>
+
+    {% for detection in detections %}
+    <section class="section">
+        <h2>Detection #{{ detection.detection_id }} — {{ detection.source_record_id }}</h2>
+        <p class="meta">
+            Observation #{{ detection.observation_id }} ·
+            Rule {{ detection.rule_id }} version {{ detection.rule_version }} ·
+            Evaluated {{ detection.evaluated_at }}
+        </p>
+        <p><strong>Review Status:</strong> {{ detection.review_status }}</p>
+        <p><strong>Detection Outcome:</strong> <span class="badge badge-{{ (detection.detection_outcome or 'insufficient_data') | lower }}">{{ detection.detection_outcome or detection.review_status }}</span></p>
+        <p><strong>Candidate priority:</strong> {{ detection.candidate_priority or "None" }}</p>
+        <h3>Explanation</h3>
+        <p>{{ detection.explanation }}</p>
+        {% if detection.evaluated_values and detection.evaluated_values.get('supporting_evidence') %}
+            <h3>Supporting Evidence</h3>
+            <ul class="evidence-list">
+                {% for item in detection.evaluated_values.get('supporting_evidence') %}
+                    <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        {% if detection.evaluated_values and detection.evaluated_values.get('missing_evidence') %}
+            <h3>Missing / Unverified Evidence</h3>
+            <ul class="evidence-list">
+                {% for item in detection.evaluated_values.get('missing_evidence') %}
+                    <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        <h3>Evaluated evidence</h3>
+        <pre>{{ detection.evaluated_values | tojson(indent=2) }}</pre>
+        {% if detection.reviewed %}
+            <p><strong>Reviewed by:</strong> {{ detection.reviewer }}</p>
+            <p><strong>Reviewed at:</strong> {{ detection.reviewed_at }}</p>
+        {% elif detection.review_status in ("PENDING_REVIEW", "NEEDS_MORE_DATA") %}
+            <form method="post" action="{{ url_for('reports.review_historical_detection', detection_id=detection.detection_id) }}">
+                {% include "shared/_csrf_field.html" %}
+                <div class="decision">
+                    <div>
+                        <label for="review-status-{{ detection.detection_id }}">Decision</label>
+                        <select id="review-status-{{ detection.detection_id }}" name="review_status" required>
+                            <option value="">Choose a decision</option>
+                            <option value="APPROVED">Approve</option>
+                            <option value="REJECTED">Reject</option>
+                            <option value="NEEDS_MORE_DATA">Needs more data</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="review-reason-{{ detection.detection_id }}">Required reason</label>
+                        <textarea id="review-reason-{{ detection.detection_id }}" name="reason" maxlength="2000" required></textarea>
+                    </div>
+                    <button type="submit">Save review</button>
+                </div>
+            </form>
+        {% else %}
+            <p>This result is not eligible for another review decision.</p>
+        {% endif %}
+    </section>
+    {% else %}
+    <section class="section empty">
+        {% if selected_outcome or selected_review_status %}
+            No historical detection results match the selected filters.
+        {% else %}
+            No historical detection results are available for review.
+        {% endif %}
+    </section>
+    {% endfor %}
+</body>
+</html>

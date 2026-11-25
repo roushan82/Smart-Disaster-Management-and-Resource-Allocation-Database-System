@@ -102,7 +102,22 @@ def schedule_pending_requests(algorithm, automatic=False, reason=None):
         if automatic:
             algorithm, reason = select_automatic_algorithm(cursor)
 
-        order_clause, order_parameters = order_by_clause(algorithm)
+        rr_cursor = None
+        if algorithm == "RR":
+            cursor.execute("""
+                SELECT rr_start_request_id
+                FROM scheduling_runs
+                WHERE algorithm = 'RR' AND rr_start_request_id IS NOT NULL
+                ORDER BY run_id DESC
+                LIMIT 1
+            """)
+            cursor_row = cursor.fetchone()
+            rr_cursor = cursor_row[0] if cursor_row else None
+
+        order_clause, order_parameters = order_by_clause(
+            algorithm,
+            rr_cursor=rr_cursor,
+        )
 
         cursor.execute("""
             INSERT INTO scheduling_runs (algorithm, reason, automatic, status)
@@ -119,6 +134,13 @@ def schedule_pending_requests(algorithm, automatic=False, reason=None):
             order_parameters,
         )
         request_ids = [row[0] for row in cursor.fetchall()]
+        if algorithm == "RR" and request_ids:
+            cursor.execute("""
+                UPDATE scheduling_runs
+                SET rr_start_request_id = %s
+                WHERE run_id = %s
+            """, (request_ids[0], run_id))
+            connection.commit()
         results = []
 
         for queue_position, request_id in enumerate(request_ids, start=1):

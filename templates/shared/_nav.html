@@ -3,9 +3,20 @@
     <a href="/disasters">Disasters</a>
     <a href="/resources">Resources</a>
     <a href="/requests">Emergency Requests</a>
+    <a href="/requests/operational-generate">Operational Request Generation</a>
     <a href="/teams">Teams</a>
     <a href="/personnel">Personnel</a>
     <a href="/reports">Reports</a>
+    <a href="/reports/scheduling-analytics">Scheduling Analytics</a>
+    <a href="/review/login">Historical Detection Review</a>
     <a href="/admin/assignments">Team Assignments</a>
+    {% if session.get('disaster_officer') %}
+        <form method="post" action="{{ url_for('emergency_requests.officer_logout') }}" style="display: inline; margin: 0;">
+            {% include "shared/_csrf_field.html" %}
+            <button type="submit" style="background: none; border: none; color: white; font-weight: bold; font-size: 17px; cursor: pointer; padding: 0;">Officer Logout</button>
+        </form>
+    {% else %}
+        <a href="{{ url_for('emergency_requests.officer_login') }}">Officer Login</a>
+    {% endif %}
     {% include "shared/_notification_nav.html" %}
 </nav>

@@ -6,6 +6,7 @@ from os_engine.policies import AGING_THRESHOLD_SECONDS, order_by_clause
 from os_engine.scheduler import (
     SCHEDULER_LOCK_NAME,
     schedule_automatically,
+    schedule_pending_requests,
     schedule_pending_requests_fcfs,
     schedule_pending_requests_priority,
 )
@@ -22,6 +23,7 @@ class SchedulerDatabase:
         self.statements = []
         self.items = []
         self.runs = []
+        self.rr_start_request_id = None
 
 
 class SchedulerCursor:
@@ -49,6 +51,12 @@ class SchedulerCursor:
                 and request[2] == "CRITICAL"
                 for request in self.database.requests
             ),)
+        elif normalized.startswith("SELECT rr_start_request_id"):
+            self.row = (
+                (self.database.rr_start_request_id,)
+                if self.database.rr_start_request_id is not None
+                else None
+            )
         elif normalized.startswith("INSERT INTO scheduling_runs"):
             self.database.algorithm = parameters[0]
             self.database.automatic = parameters[2]
@@ -59,16 +67,22 @@ class SchedulerCursor:
                 "reason": parameters[1],
                 "automatic": self.database.automatic,
                 "status": "RUNNING",
+                "rr_start_request_id": None,
             })
         elif normalized.startswith("SELECT request_id FROM emergency_requests"):
             priority_order = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 3, "LOW": 4}
             if self.database.algorithm == "PRIORITY":
                 order_key = lambda request: (
-                    0 if self.database.automatic
-                    and len(request) > 3
+                    0 if len(request) > 3
                     and request[3] >= AGING_THRESHOLD_SECONDS
                     else priority_order[request[2]],
                     request[1],
+                    request[0],
+                )
+            elif self.database.algorithm == "RR":
+                anchor = parameters[0]
+                order_key = lambda request: (
+                    0 if anchor is not None and request[0] > anchor else 1,
                     request[0],
                 )
             else:
@@ -107,9 +121,16 @@ class SchedulerCursor:
                 "result_message": result,
             })
         elif normalized.startswith("UPDATE scheduling_runs"):
-            run_id = parameters[0]
-            status = "FAILED" if "SET status = 'FAILED'" in normalized else "COMPLETED"
-            next(run for run in self.database.runs if run["run_id"] == run_id)["status"] = status
+            if "SET rr_start_request_id" in normalized:
+                cursor_id, run_id = parameters
+                self.database.rr_start_request_id = cursor_id
+                next(
+                    run for run in self.database.runs if run["run_id"] == run_id
+                )["rr_start_request_id"] = cursor_id
+            else:
+                run_id = parameters[0]
+                status = "FAILED" if "SET status = 'FAILED'" in normalized else "COMPLETED"
+                next(run for run in self.database.runs if run["run_id"] == run_id)["status"] = status
 
     def fetchone(self):
         if self.release_result_pending:
@@ -176,6 +197,205 @@ class FcfsSchedulingTests(unittest.TestCase):
         self.assertIn("ORDER BY request_time ASC, request_id ASC", queue_query)
         self.assertEqual([item["outcome"] for item in database.items], ["ALLOCATED"] * 3)
         self.assertTrue(connection.commit_count >= 8)
+
+    def test_round_robin_rotates_anchor_and_wraps_across_runs(self):
+        timestamp = datetime(2026, 10, 1, 10, 0)
+        database = SchedulerDatabase([
+            (20, timestamp, "HIGH"),
+            (5, timestamp, "LOW"),
+            (10, timestamp, "CRITICAL"),
+        ])
+        connection = SchedulerConnection(database)
+        scheduled_order = []
+
+        def fail_all(request_id):
+            scheduled_order.append(request_id)
+            return False, "Insufficient quantity."
+
+        with patch("core.db.get_db_connection", return_value=connection):
+            with patch("os_engine.scheduler.allocate_request", side_effect=fail_all):
+                first = schedule_pending_requests("RR")
+                second = schedule_pending_requests("RR")
+                third = schedule_pending_requests("RR")
+
+        self.assertEqual(scheduled_order, [5, 10, 20, 10, 20, 5, 20, 5, 10])
+        self.assertEqual(
+            [run["rr_start_request_id"] for run in database.runs],
+            [5, 10, 20],
+        )
+        self.assertEqual(first["algorithm"], "RR")
+        self.assertEqual(second["algorithm"], "RR")
+        self.assertEqual(third["algorithm"], "RR")
+        self.assertEqual([item["outcome"] for item in database.items], ["FAILED"] * 9)
+
+    def test_round_robin_keeps_failed_request_pending_and_retries_it(self):
+        timestamp = datetime(2026, 10, 1, 10, 0)
+        database = SchedulerDatabase([
+            (1, timestamp, "HIGH"),
+            (2, timestamp, "LOW"),
+        ])
+        connection = SchedulerConnection(database)
+        called = []
+
+        def allocate(request_id):
+            called.append(request_id)
+            if request_id == 1:
+                return False, "Insufficient quantity."
+            database.statuses[request_id] = "ALLOCATED"
+            return True, "Allocated."
+
+        with patch("core.db.get_db_connection", return_value=connection):
+            with patch("os_engine.scheduler.allocate_request", side_effect=allocate):
+                schedule_pending_requests("RR")
+                next_run = schedule_pending_requests("RR")
+
+        self.assertEqual(called, [1, 2, 1])
+        self.assertEqual(database.statuses[1], "PENDING")
+        self.assertEqual(
+            [item["request_id"] for item in next_run["results"]],
+            [1],
+        )
+        self.assertEqual(database.items[0]["outcome"], "FAILED")
+        self.assertEqual(database.items[1]["outcome"], "ALLOCATED")
+        self.assertEqual(database.items[2]["outcome"], "FAILED")
+
+    def test_round_robin_includes_request_added_after_previous_anchor(self):
+        timestamp = datetime(2026, 10, 1, 10, 0)
+        database = SchedulerDatabase([
+            (4, timestamp, "HIGH"),
+            (9, timestamp, "LOW"),
+            (15, timestamp, "MEDIUM"),
+        ])
+        connection = SchedulerConnection(database)
+        scheduled_order = []
+
+        def fail_all(request_id):
+            scheduled_order.append(request_id)
+            return False, "Insufficient quantity."
+
+        with patch("core.db.get_db_connection", return_value=connection):
+            with patch("os_engine.scheduler.allocate_request", side_effect=fail_all):
+                schedule_pending_requests("RR")
+                database.requests.append((22, timestamp, "LOW"))
+                database.statuses[22] = "PENDING"
+                second = schedule_pending_requests("RR")
+
+        self.assertEqual(scheduled_order, [4, 9, 15, 9, 15, 22, 4])
+        self.assertEqual(
+            [run["rr_start_request_id"] for run in database.runs],
+            [4, 9],
+        )
+        self.assertEqual(
+            [item["request_id"] for item in second["results"]],
+            [9, 15, 22, 4],
+        )
+
+    def test_round_robin_skips_request_completed_between_runs(self):
+        timestamp = datetime(2026, 10, 1, 10, 0)
+        database = SchedulerDatabase([
+            (2, timestamp, "HIGH"),
+            (6, timestamp, "LOW"),
+            (9, timestamp, "MEDIUM"),
+            (12, timestamp, "CRITICAL"),
+        ])
+        connection = SchedulerConnection(database)
+        scheduled_order = []
+
+        def fail_all(request_id):
+            scheduled_order.append(request_id)
+            return False, "Insufficient quantity."
+
+        with patch("core.db.get_db_connection", return_value=connection):
+            with patch("os_engine.scheduler.allocate_request", side_effect=fail_all):
+                schedule_pending_requests("RR")
+                database.statuses[9] = "ALLOCATED"
+                second = schedule_pending_requests("RR")
+
+        self.assertEqual(scheduled_order, [2, 6, 9, 12, 6, 12, 2])
+        self.assertEqual(
+            [item["request_id"] for item in second["results"]],
+            [6, 12, 2],
+        )
+        self.assertNotIn(9, [item["request_id"] for item in second["results"]])
+
+    def test_round_robin_rotates_and_wraps_with_gaps_in_request_ids(self):
+        timestamp = datetime(2026, 10, 1, 10, 0)
+        database = SchedulerDatabase([
+            (3, timestamp, "HIGH"),
+            (17, timestamp, "LOW"),
+            (42, timestamp, "MEDIUM"),
+        ])
+        connection = SchedulerConnection(database)
+        scheduled_order = []
+
+        def fail_all(request_id):
+            scheduled_order.append(request_id)
+            return False, "Insufficient quantity."
+
+        with patch("core.db.get_db_connection", return_value=connection):
+            with patch("os_engine.scheduler.allocate_request", side_effect=fail_all):
+                schedule_pending_requests("RR")
+                second = schedule_pending_requests("RR")
+
+        self.assertEqual(scheduled_order, [3, 17, 42, 17, 42, 3])
+        self.assertEqual(
+            [item["request_id"] for item in second["results"]],
+            [17, 42, 3],
+        )
+        self.assertEqual(
+            [run["rr_start_request_id"] for run in database.runs],
+            [3, 17],
+        )
+
+    def test_round_robin_failed_request_remains_eligible_as_rotation_advances(self):
+        timestamp = datetime(2026, 10, 1, 10, 0)
+        database = SchedulerDatabase([
+            (3, timestamp, "HIGH"),
+            (8, timestamp, "LOW"),
+            (12, timestamp, "MEDIUM"),
+            (19, timestamp, "CRITICAL"),
+        ])
+        connection = SchedulerConnection(database)
+        scheduled_order = []
+
+        def fail_all(request_id):
+            scheduled_order.append(request_id)
+            return False, "Insufficient quantity."
+
+        with patch("core.db.get_db_connection", return_value=connection):
+            with patch("os_engine.scheduler.allocate_request", side_effect=fail_all):
+                schedule_pending_requests("RR")
+                second = schedule_pending_requests("RR")
+
+        self.assertEqual(scheduled_order, [3, 8, 12, 19, 8, 12, 19, 3])
+        self.assertEqual(
+            [item["request_id"] for item in second["results"]],
+            [8, 12, 19, 3],
+        )
+        self.assertTrue(all(status == "PENDING" for status in database.statuses.values()))
+        self.assertEqual(
+            [item["outcome"] for item in database.items],
+            ["FAILED"] * 8,
+        )
+        self.assertEqual(
+            [run["rr_start_request_id"] for run in database.runs],
+            [3, 8],
+        )
+
+    def test_round_robin_respects_scheduler_wide_lock(self):
+        database = SchedulerDatabase(
+            [(3, datetime(2026, 10, 1, 10, 0), "HIGH")],
+            lock_acquired=False,
+        )
+        connection = SchedulerConnection(database)
+
+        with patch("core.db.get_db_connection", return_value=connection):
+            with patch("os_engine.scheduler.allocate_request") as allocate_mock:
+                result = schedule_pending_requests("RR")
+
+        self.assertIsNone(result["run_id"])
+        self.assertEqual(database.runs, [])
+        allocate_mock.assert_not_called()
 
     def test_insufficient_stock_is_logged_as_failure_and_later_requests_run(self):
         timestamp = datetime(2026, 10, 1, 10, 0)
@@ -308,6 +528,46 @@ class FcfsSchedulingTests(unittest.TestCase):
         self.assertIn("WHEN 'CRITICAL' THEN 1", queue_query)
         self.assertIn("request_time ASC, request_id ASC", queue_query)
 
+    def test_priority_aging_threshold_boundaries(self):
+        timestamp = datetime(2026, 10, 1, 10, 0)
+        expected_orders = {
+            899: [1, 2],
+            900: [2, 1],
+            901: [2, 1],
+        }
+
+        for age_seconds, expected_order in expected_orders.items():
+            with self.subTest(age_seconds=age_seconds):
+                database = SchedulerDatabase([
+                    (1, timestamp, "CRITICAL", 0),
+                    (2, timestamp, "LOW", age_seconds),
+                ])
+                connection = SchedulerConnection(database)
+
+                with patch("core.db.get_db_connection", return_value=connection):
+                    with patch(
+                        "os_engine.scheduler.allocate_request",
+                        return_value=(True, "Allocated."),
+                    ) as allocator:
+                        result = schedule_pending_requests_priority()
+
+                self.assertEqual(
+                    [call.args[0] for call in allocator.call_args_list],
+                    expected_order,
+                )
+                self.assertEqual(
+                    [item["request_id"] for item in result["results"]],
+                    expected_order,
+                )
+                queue_query, params = next(
+                    (" ".join(statement.split()), parameters)
+                    for statement, parameters in database.statements
+                    if "SELECT request_id FROM emergency_requests"
+                    in " ".join(statement.split())
+                )
+                self.assertIn(">= %s THEN 0", queue_query)
+                self.assertEqual(params, (AGING_THRESHOLD_SECONDS,))
+
     def test_automatic_uses_fcfs_without_pending_critical_requests(self):
         early = datetime(2026, 10, 1, 10, 0)
         late = datetime(2026, 10, 1, 10, 1)
@@ -434,6 +694,27 @@ class PolicyTests(unittest.TestCase):
         )
         self.assertIn("TIMESTAMPDIFF(SECOND", queue_query)
         self.assertEqual(params, (AGING_THRESHOLD_SECONDS,))
+
+    def test_round_robin_order_uses_cursor_then_wraps_by_request_id(self):
+        clause, params = order_by_clause("RR", alias="er", rr_cursor=12)
+
+        self.assertEqual(
+            clause,
+            "CASE WHEN er.request_id > %s THEN 0 ELSE 1 END, er.request_id ASC",
+        )
+        self.assertEqual(params, (12,))
+
+    def test_round_robin_schema_support_is_present_in_bootstrap_and_migration(self):
+        from pathlib import Path
+
+        root = Path(__file__).parents[1]
+        schema = (root / "database" / "schema.sql").read_text(encoding="utf-8")
+        migration = (
+            root / "database" / "phase_rr_migration.sql"
+        ).read_text(encoding="utf-8")
+        for definition in (schema, migration):
+            self.assertIn("algorithm IN ('FCFS', 'PRIORITY', 'RR')", definition)
+            self.assertIn("rr_start_request_id", definition)
 
     def test_unknown_algorithm_is_rejected(self):
         with self.assertRaises(ValueError):

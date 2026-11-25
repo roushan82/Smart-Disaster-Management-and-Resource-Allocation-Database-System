@@ -208,22 +208,32 @@
             <h3>Total Requests</h3>
 
             <div class="number">
-                {{ request_stats[0] or 0 }}
+                {{ request_stats.total }}
             </div>
 
             <p>
                 Pending:
-                <strong>{{ request_stats[1] or 0 }}</strong>
+                <strong>{{ request_stats.pending }}</strong>
             </p>
 
             <p>
                 Allocated:
-                <strong>{{ request_stats[2] or 0 }}</strong>
+                <strong>{{ request_stats.allocated }}</strong>
             </p>
 
             <p>
                 Partially Allocated:
-                <strong>{{ request_stats[3] or 0 }}</strong>
+                <strong>{{ request_stats.partially_allocated }}</strong>
+            </p>
+
+            <p>
+                Rejected:
+                <strong>{{ request_stats.rejected }}</strong>
+            </p>
+
+            <p>
+                Completed:
+                <strong>{{ request_stats.completed }}</strong>
             </p>
         </div>
 
@@ -232,7 +242,7 @@
     <!-- Allocation History -->
     <div class="section">
 
-        <h2>Allocation History</h2>
+        <h2>Allocation History (Showing latest 50 allocations)</h2>
 
         <table>
             <thead>

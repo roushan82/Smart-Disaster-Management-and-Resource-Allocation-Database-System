@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scheduling Analytics | Smart Disaster Management</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+        nav {
+            background: #172554;
+            padding: 18px 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 28px;
+        }
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 17px;
+        }
+        nav a:hover { color: #93c5fd; }
+        h1 {
+            font-size: 36px;
+            margin: 10px 0;
+        }
+        .subtitle {
+            color: #475569;
+            font-size: 18px;
+            margin-bottom: 25px;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+        }
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            border-top: 4px solid #2563eb;
+        }
+        .card h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #475569;
+            font-size: 17px;
+        }
+        .number {
+            font-size: 34px;
+            font-weight: bold;
+            color: #172554;
+            margin-bottom: 10px;
+        }
+        .card p { margin: 8px 0; color: #475569; }
+        .section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-top: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        }
+        .section h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 27px;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 22px;
+            margin-top: 20px;
+        }
+        .chart-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 15px;
+            min-height: 260px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: center;
+        }
+        th {
+            background: #e9efff;
+            color: #172554;
+            font-weight: bold;
+        }
+        .alert {
+            background: #fff7ed;
+            color: #9a4d00;
+            border-left: 4px solid #f59e0b;
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin: 12px 0 22px;
+            line-height: 1.5;
+        }
+        .empty-state {
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            color: #475569;
+            padding: 14px;
+            margin-top: 12px;
+        }
+        @media (max-width: 700px) {
+            body { padding: 15px; }
+            nav { gap: 16px; padding: 15px; }
+            nav a { font-size: 15px; }
+            h1 { font-size: 29px; }
+            .card, .section { padding: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Scheduling Analytics</h1>
+    <p class="subtitle">
+        Real execution metrics from the production database (including RR runs) and a simulation-only comparison of FCFS vs Priority.
+    </p>
+
+    {% include "shared/_nav.html" %}
+
+    <div class="cards">
+        <div class="card">
+            <h3>FCFS Allocation Events</h3>
+            <div class="number">
+                {% set fcfs = metrics.by_algorithm | selectattr('algorithm', 'equalto', 'FCFS') | list | first %}
+                {{ (fcfs.count if fcfs else 0) }}
+            </div>
+            <p>Real FCFS allocations</p>
+        </div>
+
+        <div class="card">
+            <h3>Priority Allocation Events</h3>
+            <div class="number">
+                {% set priority = metrics.by_algorithm | selectattr('algorithm', 'equalto', 'PRIORITY') | list | first %}
+                {{ (priority.count if priority else 0) }}
+            </div>
+            <p>Real PRIORITY allocations</p>
+        </div>
+
+        <div class="card">
+            <h3>FCFS Allocation Wait (Request Creation &rarr; Allocation)</h3>
+            <div class="number">
+                {% set avg = metrics.by_algorithm | selectattr('algorithm', 'equalto', 'FCFS') | list | first %}
+                {{ (avg.average if avg and avg.count else 'N/A') }}
+            </div>
+            <p>Elapsed time from request creation to allocation; not processing-start wait.</p>
+        </div>
+
+        <div class="card">
+            <h3>Pending Requests Aged (>= {{ metrics.aging_threshold_minutes * 60 }} seconds / {{ metrics.aging_threshold_minutes }} minutes)</h3>
+            <div class="number">{{ metrics.pending.aged_count or 0 }}</div>
+            <p>Total pending requests: {{ metrics.pending.count or 0 }}</p>
+            <p>Average pending age: {{ metrics.pending.average }}</p>
+            <p>Maximum pending age: {{ metrics.pending.longest }}</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Real Execution Metrics</h2>
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h3>Allocation Wait (Request Creation &rarr; Allocation)</h3>
+                <p>Elapsed time from request_time to allocation_time for valid allocated events.</p>
+                {% if algorithm_waits %}
+                    <canvas id="algorithmWaitChart"></canvas>
+                {% else %}
+                    <div class="empty-state">No valid timed allocations are available.</div>
+                {% endif %}
+            </div>
+
+            <div class="chart-card">
+                <h3>Allocation Events Measured</h3>
+                {% if algorithm_counts %}
+                    <canvas id="algorithmCountChart"></canvas>
+                {% else %}
+                    <div class="empty-state">No valid timed allocation events are available.</div>
+                {% endif %}
+            </div>
+
+            <div class="chart-card">
+                <h3>Allocation Wait (Request Creation &rarr; Allocation) by Priority</h3>
+                <p>Elapsed time from request creation to allocation; not processing-start wait.</p>
+                {% if priority_waits %}
+                    <canvas id="priorityWaitChart"></canvas>
+                {% else %}
+                    <div class="empty-state">No priority-based timing data is available.</div>
+                {% endif %}
+            </div>
+
+            <div class="chart-card">
+                <h3>Requests Created per Day</h3>
+                {% if metrics.request_arrivals %}
+                    <canvas id="requestArrivalsChart"></canvas>
+                {% else %}
+                    <div class="empty-state">No dated requests are available to chart.</div>
+                {% endif %}
+            </div>
+
+            <div class="chart-card">
+                <h3>Aged vs Non-Aged Pending Requests</h3>
+                {% if metrics.aging_breakdown.total_pending %}
+                    <canvas id="agingBreakdownChart"></canvas>
+                {% else %}
+                    <div class="empty-state">No pending requests are currently aging or waiting.</div>
+                {% endif %}
+            </div>
+
+            <div class="chart-card">
+                <h3>Request Distribution by Status</h3>
+                {% if status_distribution %}
+                    <canvas id="statusChart"></canvas>
+                {% else %}
+                    <div class="empty-state">No request status data is available.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="alert">
+            These are observed operational results, not a controlled or fair benchmark of FCFS, PRIORITY, and RR.
+            Different request mixes and inventory conditions can affect the results.
+            MANUAL denotes manual allocations, not a scheduling algorithm.
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Lifecycle Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>Total requests</td><td>{{ realtime_summary.total }}</td></tr>
+                <tr><td>Pending requests</td><td>{{ realtime_summary.pending }}</td></tr>
+                <tr><td>Allocated requests</td><td>{{ realtime_summary.allocated }}</td></tr>
+                <tr><td>Partially allocated requests</td><td>{{ realtime_summary.partially_allocated }}</td></tr>
+                <tr><td>Rejected requests</td><td>{{ realtime_summary.rejected }}</td></tr>
+                <tr><td>Completed requests</td><td>{{ realtime_summary.completed }}</td></tr>
+                <tr>
+                    <td>Aged pending threshold</td>
+                    <td>&gt;= {{ metrics.aging_threshold_minutes * 60 }} seconds ({{ metrics.aging_threshold_minutes }} minutes)</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Recent Scheduling Runs</h2>
+        <p>Latest 20 recorded runs.</p>
+        {% if metrics.scheduler_history %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Algorithm</th>
+                        <th>Started At</th>
+                        <th>Finished At</th>
+                        <th>Status</th>
+                        <th>Processed Requests</th>
+                        <th>RR Start Request ID</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in metrics.scheduler_history %}
+                        <tr>
+                            <td>{{ run.algorithm }}</td>
+                            <td>{{ run.started_at }}</td>
+                            <td>
+                                {% if run.finished_at is not none %}
+                                    {{ run.finished_at }}
+                                {% elif run.status == 'RUNNING' %}
+                                    In Progress
+                                {% else %}
+                                    &mdash;
+                                {% endif %}
+                            </td>
+                            <td>{{ run.status }}</td>
+                            <td>{{ run.processed_count }}</td>
+                            <td>
+                                {% if run.algorithm == 'RR' and run.rr_start_request_id is not none %}
+                                    {{ run.rr_start_request_id }}
+                                {% else %}
+                                    &mdash;
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="empty-state">No scheduling runs have been recorded.</div>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h2>Fair Algorithm Comparison (Controlled Simulation on Identical Workload)</h2>
+        <div class="alert">
+            {{ experiment.label }}<br>
+            All four algorithms (FCFS, Priority with 900s aging, preemptive Round Robin with 120s time quantum, and SJF) are evaluated using the exact same request records under identical simulated processing durations. Priority aging uses the single UTC reference timestamp {{ fair_comparison.reference_time if fair_comparison else experiment.reference_time }} for both algorithms; timestamps are normalized to UTC (naive timestamps are treated as UTC). This illustrates queue behavior and is not actual production performance; it does not modify production emergency requests or resource inventory.
+        </div>
+
+        {% if fair_comparison and fair_comparison.comparison and fair_comparison.comparison[0].request_count > 0 %}
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h3>Average Waiting Time Comparison</h3>
+                    <p>Average time waiting in queue before execution (seconds).</p>
+                    <canvas id="simWaitChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Average Turnaround Time Comparison</h3>
+                    <p>Average time from request arrival to completion (seconds).</p>
+                    <canvas id="simTurnaroundChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Average Response Time Comparison</h3>
+                    <p>Average time from request arrival to first scheduler response (seconds).</p>
+                    <canvas id="simResponseChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Throughput Comparison</h3>
+                    <p>Completed requests per hour of active simulation time (req/h).</p>
+                    <canvas id="simThroughputChart"></canvas>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 30px;">Unified Four-Algorithm Performance Summary</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Algorithm</th>
+                        <th>Sample Size (N)</th>
+                        <th>Avg Waiting Time</th>
+                        <th>Avg Turnaround Time</th>
+                        <th>Avg Response Time</th>
+                        <th>Throughput (req/h)</th>
+                        <th>Observation Window</th>
+                        <th>Classification</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in fair_comparison.comparison %}
+                        <tr>
+                            <td><strong>{{ row.algorithm }}</strong></td>
+                            <td>{{ row.request_count }}</td>
+                            <td>{{ row.average_wait_seconds | round(2) }}s</td>
+                            <td>{{ row.average_turnaround_seconds | round(2) }}s</td>
+                            <td>{{ row.average_response_seconds | round(2) }}s</td>
+                            <td>{{ "%.4f" | format(row.throughput_per_hour) }} req/h</td>
+                            <td>{{ "%.2f" | format(row.total_simulation_seconds) }}s</td>
+                            <td><span style="background: #e0e7ff; color: #3730a3; padding: 3px 8px; border-radius: 4px; font-size: 13px;">Controlled Simulation</span></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            {% if fair_comparison and fair_comparison.priority_comparison_note %}
+                <div class="alert" style="background: #f0fdf4; border-left: 4px solid #22c55e; color: #166534; margin-top: 15px;">
+                    <strong>Workload Observation: Priority vs FCFS Dynamics</strong><br>
+                    {{ fair_comparison.priority_comparison_note }}
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="empty-state">No simulation data is available because there are no historical requests to replay.</div>
+        {% endif %}
+
+        {% if fair_comparison and fair_comparison.notes %}
+            <h4 style="margin-top: 20px; color: #475569;">Simulation Specifications &amp; Workload Assumptions</h4>
+            <ul>
+                {% for note in fair_comparison.notes %}
+                    <li>{{ note }}</li>
+                {% endfor %}
+            </ul>
+        {% elif experiment.notes %}
+            <ul>
+                {% for note in experiment.notes %}
+                    <li>{{ note }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h2>Metric Definitions</h2>
+        <ul>
+            <li><strong>Waiting Time:</strong> Time spent waiting in the ready queue before allocation processing begins or resumes ($T_{\text{turnaround}} - T_{\text{duration}}$). Includes initial queue delay and all interleaved wait intervals between preemption slices in Round Robin.</li>
+            <li><strong>Turnaround Time:</strong> Total elapsed time from request arrival/creation to full allocation completion ($T_{\text{completion}} - T_{\text{arrival}}$).</li>
+            <li><strong>Response Time:</strong> Time elapsed from request arrival until the scheduler first dispatches or attempts the request ($T_{\text{first\_start}} - T_{\text{arrival}}$). For preemptive Round Robin, response time reflects initial time-slice dispatch.</li>
+            <li><strong>Throughput:</strong> Number of successfully completed allocations divided by the total observation window ($\text{Completed Requests} / \Delta t$). Expressed in requests per hour (req/h) and requests per second.</li>
+        </ul>
+    </div>
+
+    <script>
+        const algorithmWaits = {{ algorithm_waits | tojson }};
+        const algorithmCounts = {{ algorithm_counts | tojson }};
+        const priorityWaits = {{ priority_waits | tojson }};
+        const requestArrivals = {{ metrics.request_arrivals | tojson }};
+        const agingBreakdown = {{ metrics.aging_breakdown | tojson }};
+        const statusDistribution = {{ status_distribution | tojson }};
+        const simWaitingComparison = {{ (sim_waiting_comparison or []) | tojson }};
+        const simTurnaroundComparison = {{ (sim_turnaround_comparison or []) | tojson }};
+        const simResponseComparison = {{ (sim_response_comparison or []) | tojson }};
+        const simThroughputComparison = {{ (sim_throughput_comparison or []) | tojson }};
+
+        // 4-Algorithm Comparison Charts (Simulation)
+        if (simWaitingComparison && simWaitingComparison.length) {
+            new Chart(document.getElementById('simWaitChart'), {
+                type: 'bar',
+                data: {
+                    labels: simWaitingComparison.map(item => item.algorithm),
+                    datasets: [{
+                        label: 'Avg Waiting Time (seconds)',
+                        data: simWaitingComparison.map(item => item.average_wait_seconds),
+                        backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Seconds' }
+                        }
+                    }
+                }
+            });
+        }
+
+        if (simTurnaroundComparison && simTurnaroundComparison.length) {
+            new Chart(document.getElementById('simTurnaroundChart'), {
+                type: 'bar',
+                data: {
+                    labels: simTurnaroundComparison.map(item => item.algorithm),
+                    datasets: [{
+                        label: 'Avg Turnaround Time (seconds)',
+                        data: simTurnaroundComparison.map(item => item.average_turnaround_seconds),
+                        backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Seconds' }
+                        }
+                    }
+                }
+            });
+        }
+
+        if (simResponseComparison && simResponseComparison.length) {
+            new Chart(document.getElementById('simResponseChart'), {
+                type: 'bar',
+                data: {
+                    labels: simResponseComparison.map(item => item.algorithm),
+                    datasets: [{
+                        label: 'Avg Response Time (seconds)',
+                        data: simResponseComparison.map(item => item.average_response_seconds),
+                        backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Seconds' }
+                        }
+                    }
+                }
+            });
+        }
+
+        if (simThroughputComparison && simThroughputComparison.length) {
+            new Chart(document.getElementById('simThroughputChart'), {
+                type: 'bar',
+                data: {
+                    labels: simThroughputComparison.map(item => item.algorithm),
+                    datasets: [{
+                        label: 'Throughput (requests / hour)',
+                        data: simThroughputComparison.map(item => item.throughput_per_hour),
+                        backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Requests / Hour' }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + Number(context.raw).toFixed(4) + ' req/h';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        if (algorithmWaits.length) {
+            new Chart(document.getElementById('algorithmWaitChart'), {
+                type: 'bar',
+                data: {
+                    labels: algorithmWaits.map(item => item.algorithm),
+                    datasets: [{
+                        label: 'Allocation wait (seconds)',
+                        data: algorithmWaits.map(item => item.average_wait_seconds),
+                        backgroundColor: ['#2563eb', '#f59e0b', '#8b5cf6']
+                    }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        if (algorithmCounts.length) {
+            new Chart(document.getElementById('algorithmCountChart'), {
+                type: 'bar',
+                data: {
+                    labels: algorithmCounts.map(item => item.algorithm),
+                    datasets: [{
+                        label: 'Allocation events measured',
+                        data: algorithmCounts.map(item => item.count),
+                        backgroundColor: ['#1d4ed8', '#f97316', '#8b5cf6']
+                    }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        if (priorityWaits.length) {
+            new Chart(document.getElementById('priorityWaitChart'), {
+                type: 'bar',
+                data: {
+                    labels: priorityWaits.map(item => item.priority),
+                    datasets: [{
+                        label: 'Average allocation wait (seconds)',
+                        data: priorityWaits.map(item => item.average_wait_seconds),
+                        backgroundColor: ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6']
+                    }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        if (requestArrivals.length) {
+            new Chart(document.getElementById('requestArrivalsChart'), {
+                type: 'line',
+                data: {
+                    labels: requestArrivals.map(item => item.day),
+                    datasets: [{
+                        label: 'Requests created',
+                        data: requestArrivals.map(item => item.request_count),
+                        borderColor: '#2563eb',
+                        fill: false,
+                        tension: 0.3
+                    }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        if (agingBreakdown && (agingBreakdown.aged || agingBreakdown.non_aged)) {
+            new Chart(document.getElementById('agingBreakdownChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['Aged', 'Non-aged'],
+                    datasets: [{
+                        label: 'Pending requests',
+                        data: [agingBreakdown.aged || 0, agingBreakdown.non_aged || 0],
+                        backgroundColor: ['#f59e0b', '#22c55e']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true }, x: { stacked: true } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        if (statusDistribution.length) {
+            new Chart(document.getElementById('statusChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: statusDistribution.map(item => item.status),
+                    datasets: [{
+                        data: statusDistribution.map(item => item.count),
+                        backgroundColor: ['#2563eb', '#22c55e', '#f59e0b', '#ef4444', '#94a3b8']
+                    }]
+                },
+                options: { responsive: true }
+            });
+        }
+    </script>
+</body>
+</html>
